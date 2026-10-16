@@ -20,6 +20,31 @@ services:
       - gmaps_data:/gmapsdata    # job results persist here
       - gmaps_cache:/opt         # Playwright browser cache (faster restarts)
 
+  enrichment:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    command: ["python", "-u", "/service/enrichment.py"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 0.25
+    mem_limit: 128m
+    pids_limit: 32
+    environment:
+      ENRICHMENT_DATA: /data/saved
+    volumes:
+      - ./services:/service:ro
+      - enrichment_data:/data
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      - google-maps-scraper
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+
   # nginx in front of the scraper: serves the new front-end (./frontend) at "/", keeps the
   # original UI at "/classic" (patched — its htmx 1.9.6 dropped the job table rows), and
   # proxies the API unchanged. Routing lives in nginx.conf.
@@ -29,6 +54,7 @@ services:
     restart: unless-stopped
     depends_on:
       - google-maps-scraper
+      - enrichment
     ports:
       - "127.0.0.1:8080:80"     # localhost only — see warning above
     volumes:
@@ -39,3 +65,4 @@ services:
 volumes:
   gmaps_data:
   gmaps_cache:
+  enrichment_data:

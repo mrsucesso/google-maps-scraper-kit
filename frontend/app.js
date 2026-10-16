@@ -128,7 +128,7 @@
   let map, markerLayer, lookupMarker;
   const markers = {};
   if (hasMap) {
-    const last = load("view", { lat: -23.5505, lon: -46.6333, z: 12 });
+    const last = load("view", { lat: 0, lon: 0, z: 2 });
     map = L.map("map", { zoomControl: false }).setView([last.lat, last.lon], last.z);
     L.control.zoom({ position: "bottomright" }).addTo(map);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -233,7 +233,9 @@
     if (rowsCache[id]) return rowsCache[id];
     const r = await fetch(`${API}/${id}/download`, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
-    return (rowsCache[id] = parseCSV(await r.text()));
+    const rows = parseCSV(await r.text());
+    try { await Prospecting.enrichment(id, rows); } catch {}
+    return (rowsCache[id] = rows);
   }
 
   async function fetchCount(j) {
@@ -372,7 +374,7 @@
       return null;
     }
   }
-  $("#location").addEventListener("input", () => { clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 700); });
+  $("#location").addEventListener("input", () => { state.geo = null; clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 700); });
 
   // ───────────────────────── submit ─────────────────────────
   function showError(msg) { const e = $("#form-error"); e.textContent = msg; e.hidden = !msg; }
@@ -684,6 +686,7 @@
   setDepth(prefs.depth || 5);
   if (prefs.radius) $("#radius").value = prefs.radius;
   syncRadius(false);
+  Prospecting.locationDefault(g=>{state.geo=g;if(!state.current){showLookup(g);syncRadius(false);}});
   refreshJobs();
   setInterval(refreshJobs, POLL_MS);
   setInterval(() => { renderJobs._last = null; renderJobs(); }, 30000);  // keep "há X min" fresh

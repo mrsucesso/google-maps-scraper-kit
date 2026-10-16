@@ -401,3 +401,7 @@ tbody tr:hover { background: var(--fill-2); }
   max-width: calc(100% - 32px); animation: pop .3s var(--ease);
 }
 @keyframes pop { from { transform: translate(-50%, 12px); opacity: 0; } }
+.location-button { display:inline-block; margin:5px 0; padding:2px 0; border:0; border-radius:0; background:transparent; color:var(--label-2, #666); font-size:11px; font-weight:400; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+
+.location-tip { display:block; font-size:11px; line-height:1.5; color:var(--label-3, #777); margin:0 0 6px; }
+

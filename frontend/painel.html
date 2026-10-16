@@ -76,7 +76,7 @@
             <span class="step-n">2</span>
             <div class="step-body">
               <label for="location" class="step-title">Onde?</label>
-              <input id="location" class="input" type="text" placeholder="ex.: Barra Funda, São Paulo">
+              <input id="location" class="input" type="text" placeholder="Sua cidade ou outro local">
               <div id="geo-status" class="geo-status"></div>
               <div id="geo-map" class="geo-map" hidden></div>
               <div class="radius-box">
@@ -178,6 +178,13 @@
       </div>
 
       <div class="mini-kpis" id="mini-kpis"></div>
+      <p class="help">Clique nos cards: com → sem → todos. WhatsApp é estimado pelo formato do celular, sem confirmação de conta ativa.</p>
+      <div id="prospect-filters" class="filters">
+        <label>Telefone<select id="prospect-phone" class="input"><option value="">Todos</option><option value="yes">Com telefone</option><option value="no">Sem telefone</option></select></label>
+        <label>WhatsApp estimado<select id="prospect-whatsapp" class="input"><option value="">Todos</option><option value="yes">Com indicação de WhatsApp</option><option value="no">Sem indicação de WhatsApp</option></select></label>
+        <label>Site informado<select id="prospect-website" class="input"><option value="">Todos</option><option value="yes">Com site</option><option value="no">Sem site</option></select></label>
+        <label>Nota<select id="prospect-rating" class="input"><option value="">Todas</option><option value="3">Abaixo de 3</option><option value="4">Abaixo de 4</option><option value="4.5">Abaixo de 4,5</option></select></label>
+      </div>
 
       <div class="filters">
         <label class="filter">
@@ -216,11 +223,19 @@
         </div>
       </div>
 
+      <div class="selection-bar">
+        <button type="button" class="btn" id="select-visible">Selecionar visíveis</button>
+        <button type="button" class="btn" id="select-none">Nenhuma</button>
+        <button type="button" class="btn filled" id="enrich-selected" disabled>Buscar e-mails das selecionadas</button>
+        <span id="selection-count" role="status"></span>
+        <span id="enrichment-status" role="status"></span>
+        <p class="help">Visita somente os sites das selecionadas, sem repetir o Maps. Os e-mails ficam salvos nesta busca. Empresas sem site serão sinalizadas.</p>
+      </div>
       <div class="results-body">
         <div class="table-wrap">
           <table id="results-table">
             <thead><tr>
-              <th>Empresa</th><th>Contato</th><th class="num">Nota</th><th>Endereço</th><th></th>
+              <th><input id="select-all" type="checkbox" aria-label="Selecionar todas as empresas visíveis"></th><th>Empresa</th><th>Contato</th><th class="num">Nota</th><th>Endereço</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -241,6 +256,7 @@
 
   <div id="toast" class="toast" hidden role="status"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="/app/prospecting.js"></script>
   <script src="/app/painel.js"></script>
 </body>
 </html>

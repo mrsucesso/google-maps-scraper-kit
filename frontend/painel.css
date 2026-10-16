@@ -386,3 +386,16 @@ td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: t
 .liquid .nav-item:hover { background: rgba(255, 255, 255, .55); }
 .liquid .nav-item.active { background: rgba(255, 255, 255, .85); color: var(--blue-press); box-shadow: 0 2px 8px rgba(0, 0, 0, .08), inset 0 1px 0 #fff; }
 .liquid .credits.compact { background: rgba(255, 255, 255, .45); }
+.mini-kpis button.mini { border: 1px solid transparent; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.mini-kpis button.mini.active { background: #e8f0fe; border-color: #1a73e8; }
+.mini-kpis button.mini:focus-visible, .location-button:focus-visible { outline: 3px solid #1a73e8; outline-offset: 2px; }
+.selection-bar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:16px 0; }
+.selection-bar .help { flex-basis:100%; }
+.selection-bar button:disabled { opacity:.5; cursor:not-allowed; }
+.email-status { color:#555; font-size:11px; }
+.location-button { display:inline-block; margin:5px 0; padding:2px 0; border:0; border-radius:0; background:transparent; color:var(--label-2, #666); font-size:11px; font-weight:400; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+#prospect-filters label { font-size:12px; }
+#results-table input[type=checkbox] { width:18px; height:18px; cursor:pointer; }
+
+.location-tip { display:block; font-size:11px; line-height:1.5; color:var(--label-3, #777); margin:0 0 6px; }
+

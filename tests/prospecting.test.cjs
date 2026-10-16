@@ -1,0 +1,4 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {matches,whatsapp}=require('../frontend/prospecting.js');
+test('combine absence of website and inferred WhatsApp',()=>{assert.equal(matches({website:'',phone:'2733334444'},{website:'no',whatsapp:'no'}),true);assert.equal(matches({website:'https://example.com',phone:'27999998888'},{website:'no'}),false);});
+test('rating thresholds exclude missing ratings and boundary',()=>{assert.equal(matches({review_rating:''},{rating:'4'}),false);assert.equal(matches({review_rating:'4'},{rating:'4'}),false);assert.equal(matches({review_rating:'3.9'},{rating:'4'}),true);});
+test('Brazilian mobile is an inference; fixed line excluded',()=>{assert.equal(whatsapp('+55 27 99999-8888'),true);assert.equal(whatsapp('+55 27 3333-4444'),false);});

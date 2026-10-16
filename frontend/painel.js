@@ -32,7 +32,7 @@
     };
   };
 
-  const state = { jobs: [], stats: {}, prevStatus: {}, current: null, rows: [], visible: [], geo: null, submitting: false, depth: 5, booted: false };
+  const state = { jobs: [], stats: {}, prevStatus: {}, current: null, rows: [], visible: [], geo: null, submitting: false, depth: 5, booted: false, selected: new Set(), filters: {}, enriching: false };
 
   // ───────────────────────── utils ─────────────────────────
   function toast(msg, ms = 4000) {
@@ -138,7 +138,7 @@
   function ensureResultsMap() {
     if (!hasMap) return false;
     if (!map) {
-      map = L.map("map").setView([-23.55, -46.63], 12);
+      map = L.map("map").setView([0, 0], 2);
       tiles().addTo(map);
       markerLayer = L.layerGroup().addTo(map);
     }
@@ -178,7 +178,7 @@
   function setHealth(ok) {
     const h = $("#health");
     h.className = "health " + (ok ? "ok" : "down");
-    h.lastElementChild.textContent = ok ? "Scraper online" : "Offline: abra o Docker Desktop";
+    h.lastElementChild.textContent = ok ? "Scraper online" : "Servidor indisponível: confira o Tailscale";
   }
 
   async function refreshJobs() {
@@ -199,7 +199,7 @@
       if (!state.booted) { state.booted = true; openInitial(); }
     } catch {
       setHealth(false);
-      if (!state.jobs.length) $("#jobs").innerHTML = `<li class="empty">Não consegui falar com o scraper.<br>Confira se o Docker Desktop está aberto.</li>`;
+      if (!state.jobs.length) $("#jobs").innerHTML = `<li class="empty">Não consegui falar com o scraper.<br>Confira sua conexão Tailscale e o servidor.</li>`;
     }
   }
 
@@ -215,14 +215,16 @@
     if (rowsCache[id]) return rowsCache[id];
     const r = await fetch(`${API}/${id}/download`, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
-    return (rowsCache[id] = parseCSV(await r.text()));
+    const rows = parseCSV(await r.text());
+    try { await Prospecting.enrichment(id, rows); } catch { toast("Não consegui carregar os e-mails adicionais. Os dados originais continuam disponíveis."); }
+    return (rowsCache[id] = rows);
   }
 
   async function loadStats(j) {
     state.stats[j.id] = { loading: true };
     try {
       const rows = await fetchRows(j.id);
-      state.stats[j.id] = { n: rows.length, phone: rows.filter((r) => r.phone).length, email: rows.filter((r) => emailsOf(r).length).length, withEmail: !!j.email };
+      state.stats[j.id] = { n: rows.length, phone: rows.filter((r) => r.phone).length, email: rows.filter((r) => emailsOf(r).length).length, withEmail: !!j.email || rows.some(r => emailsOf(r).length) };
     } catch { state.stats[j.id] = { error: true }; }
     renderJobs(); renderKPIs();
   }
@@ -387,7 +389,7 @@
       return null;
     }
   }
-  $("#location").addEventListener("input", () => { clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 600); });
+  $("#location").addEventListener("input", () => { state.geo = null; clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 600); });
   $("#keyword").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("#location").value.trim()) { e.preventDefault(); $("#location").focus(); } });
 
   // ───────────────────────── submit ─────────────────────────
@@ -444,6 +446,8 @@
 
   // ───────────────────────── results ─────────────────────────
   async function openResults(job, { scroll = true, announce = true } = {}) {
+    state.selected.clear(); state.filters = {};
+    document.querySelectorAll("#prospect-filters select").forEach(s => s.value = "");
     state.current = job.id; renderJobs._last = null; renderJobs();
     history.replaceState(null, "", `#job=${job.id}`);
     $("#open-in-map").href = `/#job=${job.id}`;
@@ -452,13 +456,13 @@
     $("#results-title").textContent = job.name || "Resultados";
     $("#results-sub").textContent = `${job.keywords.join(" / ")} · ${ago(job.date)}`;
     $("#mini-kpis").innerHTML = "";
-    $("#results-table tbody").innerHTML = `<tr><td colspan="5" class="empty">Carregando…</td></tr>`;
+    $("#results-table tbody").innerHTML = `<tr><td colspan="6" class="empty">Carregando…</td></tr>`;
     $("#raw-download").href = `${API}/${job.id}/download`;
     $("#raw-download").setAttribute("download", `${slug(job.name)}-completo.csv`);
     if (scroll) $("#results").scrollIntoView({ behavior: "smooth", block: "start" });
     let rows;
     try { rows = await fetchRows(job.id); }
-    catch { $("#results-table tbody").innerHTML = `<tr><td colspan="5" class="empty">Não consegui baixar os resultados dessa busca.</td></tr>`; return; }
+    catch { $("#results-table tbody").innerHTML = `<tr><td colspan="6" class="empty">Não consegui baixar os resultados dessa busca.</td></tr>`; return; }
     if (state.current !== job.id) return;          // user opened another one meanwhile
     state.rows = rows;
 
@@ -466,7 +470,7 @@
     const counts = Object.fromEntries(cats.map((c) => [c, rows.filter((r) => r.category === c).length]));
     $("#cat-filter").innerHTML = `<option value="">Todas (${rows.length})</option>` + cats.map((c) => `<option value="${esc(c)}">${esc(c)} (${counts[c]})</option>`).join("");
     $("#filter").value = ""; $("#sort").value = "";
-    $("#only-email").closest(".check").hidden = !job.email;
+    $("#only-email").closest(".check").hidden = false;
     $("#only-email").checked = false;
 
     // Only default the radius filter on when most results really are inside the circle: if the place was
@@ -479,19 +483,8 @@
     $("#in-radius-label").textContent = hasArea ? `dentro de ${Math.round(job.radius / 100) / 10} km` : "";
     if (hasArea && share < 0.5 && announce) toast("A maioria dos resultados ficou fora do raio (o local pode ter sido entendido diferente). Filtro de raio desligado.", 7000);
 
-    const n = (f) => rows.filter(f).length;
-    const rated = rows.filter((r) => +r.review_rating);
-    const avg = rated.length ? rated.reduce((a, r) => a + +r.review_rating, 0) / rated.length : 0;
-    const mini = [
-      [fmt(rows.length), "empresas"],
-      [fmt(n((r) => r.phone)), "com telefone"],
-      [fmt(n((r) => whatsapp(r.phone))), "com WhatsApp"],
-      [fmt(n((r) => r.website)), "com site"],
-      ...(job.email ? [[fmt(n((r) => emailsOf(r).length)), "com e-mail"]] : []),
-      [avg ? avg.toFixed(1).replace(".", ",") + " ★" : "—", "nota média"],
-    ];
-    $("#mini-kpis").innerHTML = mini.map(([v, l]) => `<div class="mini"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
-    renderResults();
+    state.enriching=false; $('#enrichment-status').textContent='';
+    renderResults(); syncEnrichment(job.id);
   }
 
   function closeResults() {
@@ -510,6 +503,7 @@
     const area = $("#in-radius").checked && job.lat && job.radius;
     const onlyPhone = $("#only-phone").checked, onlyEmail = $("#only-email").checked;
     let rows = state.rows.filter((r) =>
+      Prospecting.matches(r, state.filters) &&
       (!area || !+r.latitude || distance(job.lat, job.lon, +r.latitude, +r.longitude) <= job.radius) &&
       (!cat || r.category === cat) && (!onlyPhone || r.phone) && (!onlyEmail || emailsOf(r).length) &&
       (!q || [r.title, r.category, r.address, r.phone, r.website, r.emails].join(" ").toLowerCase().includes(q)));
@@ -533,16 +527,19 @@
 
   function renderResults() {
     const rows = (state.visible = visibleRows());
+    renderCards(); updateSelection();
     $("#export-count").textContent = `${fmt(rows.length)} de ${fmt(state.rows.length)} empresas`;
     $("#results-table tbody").innerHTML = rows.length ? rows.map((r, i) => {
       const wa = whatsapp(r.phone);
       const rating = +r.review_rating;
       const site = r.website ? r.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "") : "";
       return `<tr data-i="${i}">
+        <td><input type="checkbox" data-select="${state.rows.indexOf(r)}" aria-label="Selecionar ${esc(r.title)}" ${state.selected.has(state.rows.indexOf(r)) ? "checked" : ""}></td>
         <td><div class="co-name">${esc(r.title)}</div><div class="co-cat">${esc(r.category)}</div></td>
         <td><div class="contact">
           ${r.phone ? `<span>${esc(r.phone)}</span>` : `<span class="none">sem telefone</span>`}
           ${wa ? `<a class="wa" href="${wa}" target="_blank" rel="noopener">WhatsApp ↗</a>` : ""}
+          ${r.email_status ? `<small class="email-status">${esc(r.email_status)}</small>` : ""}
           ${emailsOf(r).map((m) => `<a href="mailto:${esc(m)}">${esc(m)}</a>`).join("")}
           ${site ? `<a href="${esc(r.website)}" target="_blank" rel="noopener">${esc(site.length > 34 ? site.slice(0, 34) + "…" : site)}</a>` : ""}
         </div></td>
@@ -550,19 +547,90 @@
         <td class="addr">${esc(r.address.replace(r.title + " - ", ""))}</td>
         <td class="row-actions">${r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">Maps ↗</a>` : ""}</td>
       </tr>`;
-    }).join("") : `<tr><td colspan="5" class="empty">Nenhuma empresa com esses filtros.</td></tr>`;
+    }).join("") : `<tr><td colspan="6" class="empty">Nenhuma empresa com esses filtros.</td></tr>`;
     plotRows(rows);
   }
 
   ["#filter", "#cat-filter", "#sort", "#in-radius", "#dedupe", "#only-phone", "#only-email"].forEach((s) => $(s).addEventListener("input", renderResults));
   $("#results-table tbody").addEventListener("click", (e) => {
-    if (e.target.closest("a")) return;
+    if (e.target.closest("a, input, button")) return;
     const tr = e.target.closest("tr[data-i]");
     if (!tr) return;
     const i = +tr.dataset.i, m = markers[i];
     highlight(i, false);
     if (m) { map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 16), { duration: 0.6 }); m.openPopup(); }
   });
+
+
+  function renderCards() {
+    const rated=state.rows.filter(r=>+r.review_rating>0);
+    const avg=rated.length?rated.reduce((sum,r)=>sum+(+r.review_rating),0)/rated.length:0;
+    const cards = [
+      ['all', state.rows.length, 'empresas'],
+      ['phone', state.rows.filter(r=>r.phone).length, 'telefone'],
+      ['whatsapp', state.rows.filter(r=>Prospecting.whatsapp(r.phone)).length, 'WhatsApp estimado'],
+      ['website', state.rows.filter(r=>r.website).length, 'site'],
+      ['rating', avg?avg.toFixed(1).replace('.',',')+' ★':'—', 'nota média'],
+    ];
+    $('#mini-kpis').innerHTML=cards.map(([key,n,label])=> {
+      const mode=state.filters[key]||'';
+      const value=key==='rating'?n:fmt(mode==='no'?state.rows.length-n:n);
+      const text=key==='all'?'empresas · limpar filtros':key==='rating'?(mode?'Abaixo de '+mode:'nota média · filtrar'):(mode==='no'?'Sem ':'Com ')+label;
+      return `<button type="button" class="mini ${mode?'active':''}" data-prospect="${key}" aria-pressed="${!!mode}"><b>${esc(value)}</b><span>${esc(text)}</span></button>`;
+    }).join('');
+  }
+  $('#mini-kpis').addEventListener('click', e=> {
+    const b=e.target.closest('[data-prospect]');if(!b)return;
+    const key=b.dataset.prospect;
+    if(key==='all') {
+      state.filters={};$('#filter').value='';$('#cat-filter').value='';$('#only-phone').checked=false;$('#only-email').checked=false;$('#in-radius').checked=false;$('#dedupe').checked=false;
+      document.querySelectorAll('#prospect-filters select').forEach(s=>s.value='');
+    } else {
+      state.filters[key]=key==='rating'?(state.filters.rating?'':'4'):({'':'yes',yes:'no',no:''}[state.filters[key]||'']);
+      $('#prospect-'+key).value=state.filters[key];
+      if(key==='phone')$('#only-phone').checked=false;
+    }
+    renderResults();
+  });
+  document.querySelectorAll('#prospect-filters select').forEach(s=>s.addEventListener('change',()=>{state.filters[s.id.replace('prospect-','')]=s.value;if(s.id==='prospect-phone')$('#only-phone').checked=false;renderResults();}));
+  function updateSelection() {
+    const count=state.selected.size;
+    $('#selection-count').textContent=count+' selecionada(s)'+(count?'; '+state.visible.filter(r=>state.selected.has(state.rows.indexOf(r))).length+' visíveis':'');
+    $('#enrich-selected').disabled=!count||state.enriching;
+    const visible=state.visible.map(r=>state.rows.indexOf(r));
+    $('#select-all').checked=!!visible.length&&visible.every(i=>state.selected.has(i));
+    $('#select-all').indeterminate=visible.some(i=>state.selected.has(i))&&!$('#select-all').checked;
+  }
+  function selectVisible(checked) {state.visible.forEach(r=>{const i=state.rows.indexOf(r);if(checked)state.selected.add(i);else state.selected.delete(i);});renderResults();}
+  $('#select-visible').addEventListener('click',()=>selectVisible(true));
+  $('#select-none').addEventListener('click',()=>{state.selected.clear();renderResults();});
+  $('#select-all').addEventListener('change',e=>selectVisible(e.target.checked));
+  $('#results-table tbody').addEventListener('change',e=>{if(!e.target.matches('[data-select]'))return;const i=+e.target.dataset.select;if(e.target.checked)state.selected.add(i);else state.selected.delete(i);updateSelection();});
+  async function syncEnrichment(job) {
+    try {
+      const rows=rowsCache[job];if(!rows)return;
+      const data=await Prospecting.enrichment(job,rows);
+      if(state.current!==job)return;
+      const signature=JSON.stringify(data);
+      if(syncEnrichment.job===job&&syncEnrichment.signature===signature)return;
+      syncEnrichment.job=job;syncEnrichment.signature=signature;
+      if(state.stats[job]) {state.stats[job].email=rows.filter(r=>emailsOf(r).length).length;state.stats[job].withEmail=state.stats[job].withEmail||!!state.stats[job].email;renderKPIs();}
+      state.enriching=data.status==='working';
+      $('#enrichment-status').textContent=data.total?`${state.enriching?'Buscando':'Finalizado'}: ${data.done}/${data.total} empresas` : '';
+      if(data.status==='interrupted')$('#enrichment-status').textContent='Busca interrompida. Selecione as empresas para tentar novamente.';
+      renderResults();
+    } catch {if(state.current===job)$('#enrichment-status').textContent='Falha ao consultar e-mails. Tentaremos novamente.';}
+  }
+  $('#enrich-selected').addEventListener('click',async()=>{
+    const job=state.current, indices=[...state.selected];if(!job||!indices.length)return;
+    state.enriching=true;updateSelection();
+    try {
+      const r=await fetch('/enrichment/'+job,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({indices})});
+      if(!r.ok)throw Error((await r.json()).error||'Não foi possível iniciar.');
+      await syncEnrichment(job);
+    } catch(e){if(state.current===job){state.enriching=false;updateSelection();toast(e.message);}}
+  });
+  setInterval(()=>{if(state.current)syncEnrichment(state.current);},4000);
 
   // ───────────────────────── export ─────────────────────────
   const EXPORT_HEAD = ["Nome", "Categoria", "Telefone", "WhatsApp", "E-mail", "Site", "Nota", "Avaliações", "Endereço", "Link Google Maps"];
@@ -615,6 +683,7 @@
   setDepth(prefs.depth || 5);
   if (prefs.radius) $("#radius").value = prefs.radius;
   syncRadius();
+  Prospecting.locationDefault(g=>{state.geo=g;syncRadius();});
   refreshJobs();
   setInterval(refreshJobs, POLL_MS);
   setInterval(() => { renderJobs._last = null; renderJobs(); }, 30000);  // keep "há X min" fresh

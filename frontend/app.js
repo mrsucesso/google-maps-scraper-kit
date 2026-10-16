@@ -374,7 +374,7 @@
       return null;
     }
   }
-  $("#location").addEventListener("input", () => { clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 700); });
+  $("#location").addEventListener("input", () => { state.geo = null; clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 700); });
 
   // ───────────────────────── submit ─────────────────────────
   function showError(msg) { const e = $("#form-error"); e.textContent = msg; e.hidden = !msg; }

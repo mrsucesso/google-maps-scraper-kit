@@ -389,7 +389,7 @@
       return null;
     }
   }
-  $("#location").addEventListener("input", () => { clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 600); });
+  $("#location").addEventListener("input", () => { state.geo = null; clearTimeout(geoTimer); geoTimer = setTimeout(checkLocation, 600); });
   $("#keyword").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("#location").value.trim()) { e.preventDefault(); $("#location").focus(); } });
 
   // ───────────────────────── submit ─────────────────────────
@@ -563,17 +563,20 @@
 
 
   function renderCards() {
+    const rated=state.rows.filter(r=>+r.review_rating>0);
+    const avg=rated.length?rated.reduce((sum,r)=>sum+(+r.review_rating),0)/rated.length:0;
     const cards = [
       ['all', state.rows.length, 'empresas'],
       ['phone', state.rows.filter(r=>r.phone).length, 'telefone'],
       ['whatsapp', state.rows.filter(r=>Prospecting.whatsapp(r.phone)).length, 'WhatsApp estimado'],
       ['website', state.rows.filter(r=>r.website).length, 'site'],
-      ['rating', state.rows.filter(r=>+r.review_rating>0&&+r.review_rating<4).length, 'nota abaixo de 4'],
+      ['rating', avg?avg.toFixed(1).replace('.',',')+' ★':'—', 'nota média'],
     ];
     $('#mini-kpis').innerHTML=cards.map(([key,n,label])=> {
       const mode=state.filters[key]||'';
-      const text=key==='all'?'Limpar filtros':key==='rating'?(mode?'Filtrando: abaixo de '+mode:'Filtrar notas baixas'):(mode==='yes'?'Com ':mode==='no'?'Sem ':'Todos: ')+label;
-      return `<button type="button" class="mini ${mode?'active':''}" data-prospect="${key}" aria-pressed="${!!mode}"><b>${fmt(n)}</b><span>${esc(text)}</span></button>`;
+      const value=key==='rating'?n:fmt(mode==='no'?state.rows.length-n:n);
+      const text=key==='all'?'empresas · limpar filtros':key==='rating'?(mode?'Abaixo de '+mode:'nota média · filtrar'):(mode==='no'?'Sem ':'Com ')+label;
+      return `<button type="button" class="mini ${mode?'active':''}" data-prospect="${key}" aria-pressed="${!!mode}"><b>${esc(value)}</b><span>${esc(text)}</span></button>`;
     }).join('');
   }
   $('#mini-kpis').addEventListener('click', e=> {

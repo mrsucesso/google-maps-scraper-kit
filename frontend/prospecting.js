@@ -22,6 +22,7 @@
     let generation=0;
     input.placeholder='Sua cidade ou outro local';
     const button=document.createElement('button'); button.type='button';button.className='location-button';button.textContent='Usar minha localização';input.after(button);
+    const tip=document.createElement('small');tip.className='location-tip';tip.textContent='Cidade, bairro, CEP ou código do aeroporto (ex.: VIX).';button.after(tip);
     input.addEventListener('input',()=>generation++);
     async function locate() {
       const version=++generation;
@@ -42,8 +43,9 @@
     }
     button.addEventListener('click',locate);
     try {const saved=JSON.parse(localStorage.getItem('ms:home'));if(saved&&!input.value){input.value=saved.label;apply(saved);}}catch{}
-    if(!input.value)locate();
+
   }
   const api={matches,whatsapp,enrichment,locationDefault};
   if(typeof module!=='undefined')module.exports=api;else root.Prospecting=api;
 })(typeof window==='undefined'?globalThis:window);
+

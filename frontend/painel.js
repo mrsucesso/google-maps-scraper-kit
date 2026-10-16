@@ -224,7 +224,7 @@
     state.stats[j.id] = { loading: true };
     try {
       const rows = await fetchRows(j.id);
-      state.stats[j.id] = { n: rows.length, phone: rows.filter((r) => r.phone).length, email: rows.filter((r) => emailsOf(r).length).length, withEmail: !!j.email };
+      state.stats[j.id] = { n: rows.length, phone: rows.filter((r) => r.phone).length, email: rows.filter((r) => emailsOf(r).length).length, withEmail: !!j.email || rows.some(r => emailsOf(r).length) };
     } catch { state.stats[j.id] = { error: true }; }
     renderJobs(); renderKPIs();
   }
@@ -611,6 +611,10 @@
       const rows=rowsCache[job];if(!rows)return;
       const data=await Prospecting.enrichment(job,rows);
       if(state.current!==job)return;
+      const signature=JSON.stringify(data);
+      if(syncEnrichment.job===job&&syncEnrichment.signature===signature)return;
+      syncEnrichment.job=job;syncEnrichment.signature=signature;
+      if(state.stats[job]) {state.stats[job].email=rows.filter(r=>emailsOf(r).length).length;state.stats[job].withEmail=state.stats[job].withEmail||!!state.stats[job].email;renderKPIs();}
       state.enriching=data.status==='working';
       $('#enrichment-status').textContent=data.total?`${state.enriching?'Buscando':'Finalizado'}: ${data.done}/${data.total} empresas` : '';
       if(data.status==='interrupted')$('#enrichment-status').textContent='Busca interrompida. Selecione as empresas para tentar novamente.';
